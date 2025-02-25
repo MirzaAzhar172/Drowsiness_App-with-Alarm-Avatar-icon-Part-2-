@@ -15,8 +15,8 @@ class DrowsinessDetector {
   final int _yawnThreshold = 5;
   bool _isYawning = false;
 
-  final double _yawnAspectRatioThreshold = 0.4;
-  final int _stableFramesRequired = 2;
+  final double _yawnAspectRatioThreshold = 0.4; // Dikurangkan dari 0.5 ke 0.4
+  final int _stableFramesRequired = 2; // Dikurangkan dari 4 ke 2
 
   double _maxMouthOpening = 0.0;
   bool _calibrationComplete = false;
@@ -28,14 +28,14 @@ class DrowsinessDetector {
   bool _baselineEstablished = false;
   int _stableFrames = 0;
 
-  Rect? _faceBoundingBox; // Simpan bounding box wajah
+  Rect? _faceBoundingBox;
 
   DrowsinessDetector()
       : _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
       enableClassification: true,
       enableLandmarks: true,
-      enableTracking: true, // Tambah tracking untuk stability
+      enableTracking: true,
       performanceMode: FaceDetectorMode.accurate,
     ),
   );
@@ -52,7 +52,6 @@ class DrowsinessDetector {
     _detectDrowsiness(face);
     _detectYawn(face);
 
-    // Simpan bounding box untuk avatar overlay
     _faceBoundingBox = face.boundingBox;
 
     if (_isDrowsy || _isYawning) {
@@ -64,7 +63,7 @@ class DrowsinessDetector {
     return {
       'drowsy': _isDrowsy,
       'yawning': _isYawning,
-      'faceBoundingBox': _faceBoundingBox, // Hantar bounding box
+      'faceBoundingBox': _faceBoundingBox,
     };
   }
 
@@ -127,15 +126,14 @@ class DrowsinessDetector {
       return;
     }
 
-    double yawnThreshold =
-    max(_yawnAspectRatioThreshold, _baselineAspectRatio * 1.3);
+    double yawnThreshold = max(_yawnAspectRatioThreshold, _baselineAspectRatio * 1.3); // Turunkan dari 1.5 ke 1.3
 
     bool isLikelyYawning =
-        aspectRatio > yawnThreshold || (aspectRatio > _baselineAspectRatio * 1.5);
+        aspectRatio > yawnThreshold || (aspectRatio > _baselineAspectRatio * 1.4); // Turun dari 1.6 ke 1.4
 
     if (isLikelyYawning) {
       _stableFrames++;
-      if (_stableFrames >= _stableFramesRequired) {
+      if (_stableFrames >= _stableFramesRequired) { // Guna 2 frame je
         _consecutiveFramesWithYawn++;
       }
     } else {
