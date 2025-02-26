@@ -22,7 +22,7 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _previousYawningState = false;
   bool _isCameraInitialized = false;
   bool _showPopup = false;
-  int _yawnCount = 0; // Kiraan menguap
+  int _yawnCount = 0;
   FlutterTts _flutterTts = FlutterTts();
 
   @override
@@ -89,17 +89,16 @@ class _CameraScreenState extends State<CameraScreen> {
 
   void _playAlertSound() {
     debugPrint('ALERT: Detection triggered!');
-    // Implement actual sound alert here
   }
 
   Future<void> _startImageStream() async {
-    if (_cameraController != null) {
+    if (_cameraController != null && !_showPopup) { // Jangan start kalau popup masih ada
       _cameraController!.startImageStream((CameraImage cameraImage) async {
         if (_isProcessing) return;
         _isProcessing = true;
 
         try {
-          await Future.delayed(Duration(milliseconds: 100)); // Kurangkan penggunaan CPU
+          await Future.delayed(Duration(milliseconds: 100));
           final inputImage = _convertCameraImageToInputImage(
             cameraImage,
             _cameraController!.description,
@@ -155,6 +154,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _showRestPopup() {
+    _cameraController!.stopImageStream(); // **STOP CAMERA SEBELUM POPUP KELUAR**
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -164,10 +165,12 @@ class _CameraScreenState extends State<CameraScreen> {
           TextButton(
             onPressed: () {
               setState(() {
-                _yawnCount = 0; // Reset kiraan menguap
+                _yawnCount = 0;
                 _showPopup = false;
               });
+
               Navigator.pop(context);
+              _startImageStream(); // **START SEMULA CAMERA LEPAS TEKAN OK**
             },
             child: Text("OK"),
           ),
