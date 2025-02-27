@@ -23,6 +23,7 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isCameraInitialized = false;
   bool _showPopup = false;
   int _yawnCount = 0;
+  int _drowsyCount = 0; // Counter untuk drowsiness
   FlutterTts _flutterTts = FlutterTts();
 
   @override
@@ -113,6 +114,16 @@ class _CameraScreenState extends State<CameraScreen> {
                 _isYawning = result['yawning'] ?? false;
               });
 
+              if (_isDrowsy) {
+                _drowsyCount++;
+                debugPrint("Mengantuk $_drowsyCount kali");
+              }
+
+              if (_drowsyCount >= 3 && !_showPopup) {
+                _showPopup = true;
+                _showRestPopup();
+              }
+
               if (_isYawning && !_previousYawningState) {
                 _yawnCount++;
                 debugPrint("Menguap $_yawnCount kali");
@@ -153,19 +164,21 @@ class _CameraScreenState extends State<CameraScreen> {
     await _flutterTts.speak("You are Yawn in driving, Beware sir.");
   }
 
-  void _showRestPopup() {
+  Future<void> _showRestPopup() async {
     _cameraController!.stopImageStream(); // **STOP CAMERA SEBELUM POPUP KELUAR**
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text("Warning!"),
         content: Text("Get some rest, you need a fresh air, Be well sir."),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               setState(() {
                 _yawnCount = 0;
+                _drowsyCount = 0;
                 _showPopup = false;
               });
 
