@@ -8,6 +8,7 @@ import 'dart:ui';
 import '../utils/drowsiness_detector.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:io';
+import 'settings_page.dart'; // Import SettingsPage
 
 class CameraScreen extends StatefulWidget {
   @override
@@ -471,53 +472,6 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class SettingsPage extends StatefulWidget {
-  final bool isCameraEnabled;
-  final ValueChanged<bool> onCameraToggleChanged;
-
-  SettingsPage({required this.isCameraEnabled, required this.onCameraToggleChanged});
-
-  @override
-  _SettingsPageState createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  bool _isCameraEnabled = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _isCameraEnabled = widget.isCameraEnabled;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Settings'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Enable Camera/Detection'),
-            Switch(
-              value: _isCameraEnabled,
-              onChanged: (value) {
-                setState(() {
-                  _isCameraEnabled = value;
-                });
-                widget.onCameraToggleChanged(value);
-              },
-            ),
-          ],
-        ),
       ),
     );
   }
