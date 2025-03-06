@@ -45,20 +45,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   SizedBox(height: 10),
                   Text(
-                    'DROWY APP',
+                    'DROWY App',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'Aktifkan atau nonaktifkan kamera dan pengesanan pada aplikasi ini.',
+                    'Mengesan mengantuk, microsleep & menguap dengan amaran suara, popup & avatar animasi. Ada toggle kamera & detection untuk kawalan mudah. Kekal fokus, pandu selamat! 🚦',
                     style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
                   SizedBox(height: 16),
                   Divider(
-                    color: Colors.grey[400], // Warna garis pembahagi
-                    thickness: 1.0, // Ketebalan garis
+                    color: Colors.grey[400],
+                    thickness: 1.0,
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
