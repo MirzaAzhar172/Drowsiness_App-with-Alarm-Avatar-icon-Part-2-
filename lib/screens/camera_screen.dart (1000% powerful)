@@ -1,0 +1,502 @@
+import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'dart:typed_data';
+import 'dart:ui';
+import '../utils/drowsiness_detector.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'dart:io';
+import 'settings_page.dart';
+import 'announcement_page.dart'; // Import AnnouncementPage
+
+class CameraScreen extends StatefulWidget {
+  @override
+  _CameraScreenState createState() => _CameraScreenState();
+}
+
+class _CameraScreenState extends State<CameraScreen> {
+  CameraController? _cameraController;
+  List<CameraDescription> _cameras = [];
+  DrowsinessDetector? _drowsinessDetector;
+  bool _isProcessing = false;
+  bool _isDrowsy = false;
+  bool _isMicrosleep = false;
+  bool _isYawning = false;
+  bool _previousYawningState = false;
+  bool _isCameraInitialized = false;
+  bool _showPopup = false;
+  int _yawnCount = 0;
+  int _drowsyCount = 0;
+  int _microsleepCount = 0;
+  FlutterTts _flutterTts = FlutterTts();
+
+  bool _isAlarmActive = false;
+  AudioCache _audioCache = AudioCache(prefix: 'assets/');
+  AudioPlayer _audioPlayer = AudioPlayer();
+  static const alarmSound = "alarm.mp3";
+
+  bool _isCameraEnabled = true;
+  List<String> _notifications = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WakelockPlus.enable();
+    _initializeCamera();
+    _drowsinessDetector = DrowsinessDetector();
+  }
+
+  Future<void> _initializeCamera() async {
+    if (!_isCameraEnabled) return;
+    try {
+      _cameras = await availableCameras();
+      if (_cameras.isNotEmpty) {
+        final frontCamera = _cameras.firstWhere(
+              (camera) => camera.lensDirection == CameraLensDirection.front,
+          orElse: () => _cameras.first,
+        );
+
+        _cameraController = CameraController(
+          frontCamera,
+          ResolutionPreset.medium,
+          enableAudio: false,
+          imageFormatGroup: ImageFormatGroup.yuv420,
+        );
+
+        await _cameraController!.initialize();
+        if (!mounted) return;
+
+        setState(() => _isCameraInitialized = true);
+        await _startImageStream();
+      }
+    } catch (e) {
+      debugPrint('Error initializing camera: $e');
+    }
+  }
+
+  void _stopCamera() {
+    _cameraController?.stopImageStream();
+    _cameraController?.dispose();
+    setState(() {
+      _isCameraInitialized = false;
+    });
+  }
+
+  InputImage? _convertCameraImageToInputImage(
+      CameraImage cameraImage, CameraDescription cameraDescription) {
+    final BytesBuilder allBytes = BytesBuilder();
+    for (final Plane plane in cameraImage.planes) {
+      allBytes.add(plane.bytes);
+    }
+    final bytes = allBytes.toBytes();
+
+    final imageRotation = InputImageRotationValue.fromRawValue(
+      cameraDescription.sensorOrientation,
+    );
+
+    if (imageRotation == null) return null;
+
+    final inputImageFormat = InputImageFormatValue.fromRawValue(cameraImage.format.raw);
+    if (inputImageFormat == null) return null;
+
+    final metadata = InputImageMetadata(
+      size: Size(cameraImage.width.toDouble(), cameraImage.height.toDouble()),
+      rotation: imageRotation,
+      format: inputImageFormat,
+      bytesPerRow: cameraImage.planes[0].bytesPerRow,
+    );
+
+    return InputImage.fromBytes(bytes: bytes, metadata: metadata);
+  }
+
+  void _playAlertSound() async {
+    if (_isAlarmActive) {
+      File file = await _audioCache.loadAsFile(alarmSound);
+      await _audioPlayer.play(DeviceFileSource(file.path));
+    }
+    if (mounted && _isAlarmActive) {
+      Future.delayed(const Duration(milliseconds: 500), () => _playAlertSound());
+    }
+  }
+
+  Future<void> _startImageStream() async {
+    if (_cameraController != null && !_showPopup && _isCameraEnabled) {
+      _cameraController!.startImageStream((CameraImage cameraImage) async {
+        if (_isProcessing) return;
+        _isProcessing = true;
+
+        try {
+          await Future.delayed(Duration(milliseconds: 100));
+          final inputImage = _convertCameraImageToInputImage(
+            cameraImage,
+            _cameraController!.description,
+          );
+
+          if (inputImage != null) {
+            final result = await _drowsinessDetector!.processCameraImage(inputImage);
+            if (mounted && (
+                _isDrowsy != result['drowsy'] ||
+                    _isMicrosleep != result['microsleep'] ||
+                    _isYawning != result['yawning'])) {
+              if (mounted) {
+                setState(() {
+                  _isDrowsy = result['drowsy'] ?? false;
+                  _isMicrosleep = result['microsleep'] ?? false;
+                  _isYawning = result['yawning'] ?? false;
+                });
+
+                if (_isDrowsy && !_isMicrosleep) {
+                  _drowsyCount++;
+                  debugPrint("Mengantuk (mata separa terbuka) $_drowsyCount kali");
+                  if (_drowsyCount >= 3 && !_showPopup) {
+                    _showPopup = true;
+                    _showDrowsyWarningPopup();
+                    _addNotification('Anda mengantuk (mata separa terbuka) lebih 3 kali!');
+                  }
+                  _speakDrowsyWarning();
+                }
+
+                if (_isMicrosleep) {
+                  _microsleepCount++;
+                  debugPrint("Microsleep (mata tertutup penuh) $_microsleepCount kali");
+                  if (_microsleepCount >= 2 && !_showPopup) {
+                    _showPopup = true;
+                    _showMicrosleepWarningPopup();
+                    _addNotification('Anda microsleep (mata tertutup penuh) lebih 2 kali!');
+                  }
+                  _speakMicrosleepWarning();
+                }
+
+                if (_isYawning && !_previousYawningState) {
+                  _yawnCount++;
+                  debugPrint("Menguap $_yawnCount kali");
+                  if (_yawnCount >= 3 && !_showPopup) {
+                    _showPopup = true;
+                    _showYawnWarningPopup();
+                    _addNotification('Anda menguap lebih 3 kali!');
+                  }
+                  _showYawnStatus();
+                  _speakYawnWarning();
+                }
+                _previousYawningState = _isYawning;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error processing image: $e');
+        } finally {
+          _isProcessing = false;
+        }
+      });
+    }
+  }
+
+  void _speakDrowsyWarning() async {
+    await _flutterTts.speak("Warning! You appear drowsy. Please stay alert while driving.");
+  }
+
+  void _speakMicrosleepWarning() async {
+    await _flutterTts.speak("Danger! You are in microsleep. Pull over immediately!");
+  }
+
+  void _speakYawnWarning() async {
+    await _flutterTts.speak("You are yawning while driving. Please be aware.");
+  }
+
+  Future<void> _showDrowsyWarningPopup() async {
+    _cameraController!.stopImageStream();
+    setState(() {
+      _isAlarmActive = true;
+    });
+    _playAlertSound();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text("Drowsiness Warning!"),
+        content: Text("You appear to be drowsy. Consider taking a short break for your safety."),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              setState(() {
+                _drowsyCount = 0;
+                _showPopup = false;
+                _isAlarmActive = false;
+              });
+              Navigator.pop(context);
+              _startImageStream();
+            },
+            child: Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showMicrosleepWarningPopup() async {
+    _cameraController!.stopImageStream();
+    setState(() {
+      _isAlarmActive = true;
+    });
+    _playAlertSound();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text("DANGER - MICROSLEEP DETECTED!"),
+        content: Text("You are experiencing microsleep! Pull over immediately and rest before continuing your journey."),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              setState(() {
+                _microsleepCount = 0;
+                _showPopup = false;
+                _isAlarmActive = false;
+              });
+              Navigator.pop(context);
+              _startImageStream();
+            },
+            child: Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showYawnWarningPopup() async {
+    _cameraController!.stopImageStream();
+    setState(() {
+      _isAlarmActive = true;
+    });
+    _playAlertSound();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text("Yawning Warning!"),
+        content: Text("You've been yawning repeatedly. This might indicate fatigue. Consider taking a short break."),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              setState(() {
+                _yawnCount = 0;
+                _showPopup = false;
+                _isAlarmActive = false;
+              });
+              Navigator.pop(context);
+              _startImageStream();
+            },
+            child: Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showRestPopup() async {
+    _cameraController!.stopImageStream();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text("Warning!"),
+        content: Text("Get some rest, you need fresh air. Be well sir."),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              setState(() {
+                _yawnCount = 0;
+                _drowsyCount = 0;
+                _microsleepCount = 0;
+                _showPopup = false;
+              });
+              Navigator.pop(context);
+              _startImageStream();
+            },
+            child: Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showYawnStatus() {
+    setState(() => _showPopup = true);
+    Future.delayed(Duration(seconds: 2), () {
+      if (mounted) setState(() => _showPopup = false);
+    });
+  }
+
+  void _openSettings() async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SettingsPage(
+          isCameraEnabled: _isCameraEnabled,
+          onCameraToggleChanged: (value) {
+            setState(() {
+              _isCameraEnabled = value;
+              if (_isCameraEnabled) {
+                _initializeCamera();
+              } else {
+                _stopCamera();
+              }
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  void _addNotification(String message) {
+    setState(() {
+      _notifications.add(message);
+    });
+    debugPrint('Notification added: $message, Notifications list: $_notifications'); // Tambah ini
+  }
+
+  void _openAnnouncementPage() {
+    debugPrint('Opening AnnouncementPage with notifications: $_notifications'); // Tambah ini
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AnnouncementPage(notifications: _notifications)),
+    );
+  }
+
+  @override
+  void dispose() {
+    _cameraController?.dispose();
+    WakelockPlus.disable();
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isCameraInitialized && _isCameraEnabled) {
+      return Scaffold(
+        backgroundColor: Colors.grey[900]!,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    String avatarPath = 'assets/avatar_normal.gif';
+    if (_isMicrosleep) {
+      avatarPath = 'assets/avatar_micro.gif';
+    } else if (_isDrowsy) {
+      avatarPath = 'assets/avatar_drowsy.gif';
+    } else if (_isYawning) {
+      avatarPath = 'assets/avatar_yawning.gif';
+    }
+
+    Color statusColor = Colors.green;
+    String statusMessage = 'Status: Normal (AKTIF)';
+
+    if (_isMicrosleep) {
+      statusColor = Colors.red.shade900;
+      statusMessage = 'BAHAYA! ANDA MICROSLEEP!';
+    } else if (_isDrowsy) {
+      statusColor = Colors.red;
+      statusMessage = 'AWAS! ANDA MENGANTUK!';
+    } else if (_isYawning) {
+      statusColor = Colors.orange;
+      statusMessage = 'MENGUAP, HATI-HATI!!';
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.grey[900]!,
+      appBar: AppBar(
+        title: Text('DROWY APP for Driver'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.announcement),
+            onPressed: _openAnnouncementPage,
+          ),
+          IconButton(
+            icon: Icon(Icons.settings),
+            onPressed: _openSettings,
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(),
+          ),
+          if (_isCameraEnabled)
+            Align(
+              alignment: Alignment(0.0, -0.2),
+              child: Opacity(
+                opacity: 0.9,
+                child: Image.asset(
+                  avatarPath,
+                  width: 650,
+                  height: 650,
+                ),
+              ),
+            ),
+          if (_isCameraEnabled)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                color: statusColor,
+                padding: EdgeInsets.all(16),
+                width: double.infinity,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      statusMessage,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (_isMicrosleep || _isDrowsy || _isYawning)
+                      Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          _isMicrosleep
+                              ? 'Anda Microsleep! BAHAYA!! Hentikan kenderaan segera!'
+                              : (_isDrowsy
+                              ? 'Mengantuk. Sila berhati-hati!'
+                              : 'Menguap. Mungkin anda penat.'),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          if (!_isCameraEnabled)
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/off_camera.gif',
+                    width: 200,
+                    height: 200,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Camera/Detector Deactivate',
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
