@@ -25,17 +25,19 @@ class _AnnouncementPageState extends State<AnnouncementPage> {
   }
 
   Future<void> _getLocationFromIP() async {
-    final apiKey = 'DDF5FEF20B1452E68586E8BFEC891019'; // API Key IP2Location.io
-    final url = Uri.parse('https://api.ip2location.io/?key=$apiKey');
+    final url = Uri.parse('http://ip-api.com/json');
 
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          _location =
-          '${data['city_name']}, ${data['region_name']}, ${data['country_name']}';
+          _location = '${data['city']}, ${data['region']}, ${data['country']}';
         });
+        double latitude = data['lat'];
+        double longitude = data['lon'];
+        print('Latitude: $latitude, Longitude: $longitude');
+        await _getWeather(latitude, longitude);
       } else {
         setState(() {
           _location = 'Gagal mendapatkan lokasi.';
@@ -49,24 +51,28 @@ class _AnnouncementPageState extends State<AnnouncementPage> {
   }
 
   Future<void> _getWeather(double latitude, double longitude) async {
-    final apiKey = '521dfa37ebc97ef1980032866e5cd8b5'; // API Key OpenWeatherMap
+    final apiKey = 'eb3a516fb18b82d0f8e963945e69d17b'; // API Key OpenWeatherMap
     final url = Uri.parse(
         'https://api.openweathermap.org/data/2.5/weather?lat=$latitude&lon=$longitude&appid=$apiKey&units=metric');
 
     try {
+      print('Membuat permintaan cuaca ke: $url');
       final response = await http.get(url);
+      print('Respons cuaca: ${response.statusCode}');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('Data cuaca: $data');
         setState(() {
           _weather =
           'Cuaca: ${data['weather'][0]['description']}, Suhu: ${data['main']['temp']}°C';
         });
       } else {
         setState(() {
-          _weather = 'Gagal mendapatkan cuaca.';
+          _weather = 'Gagal mendapatkan cuaca: ${response.statusCode}';
         });
       }
     } catch (e) {
+      print('Ralat mendapatkan cuaca: $e');
       setState(() {
         _weather = 'Ralat mendapatkan cuaca: $e';
       });
@@ -191,6 +197,24 @@ class _AnnouncementPageState extends State<AnnouncementPage> {
                       ],
                     ),
                   ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16), // Spasi antara container
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(10.0),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  'News & Media:',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+
               ],
             ),
           ),
