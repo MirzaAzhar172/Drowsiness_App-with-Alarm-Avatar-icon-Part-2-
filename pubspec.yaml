@@ -17,15 +17,32 @@ dependencies:
   typed_data: ^1.3.2
   audioplayers: ^6.2.0  # Untuk mainkan bunyi alarm
   cupertino_icons: ^1.0.8
+  flutter_gif: ^0.0.4  # Untuk support GIF animation
+  intl: ^0.20.2
+  flutter_tts: ^4.2.2 #Untuk voice speech masa dia trigger drowsiness
+  http: ^1.3.0
+  google_fonts: ^6.2.1
+  provider: ^6.1.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_icons:
+  android: true
+  image_path: "assets/app_icon.png"
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/alarm.mp3  # Bunyi alarm untuk alert drowsiness
-    - assets/avatar.png  # Gambar avatar untuk overlay AR
+    - assets/avatar_normal.gif  # GIF default untuk overlay
+    - assets/avatar_drowsy.gif  # GIF untuk drowsiness detection
+    - assets/avatar_yawning.gif  # GIF untuk yawning detection
+    - assets/avatar_micro.gif     #GIF untuk microsleep
+    - assets/background.jpg    #Background Home Screen Apps
+    - assets/logo.png   #Background Home Screen Apps
+    - assets/off_camera.gif #GIF untuk camera disable
