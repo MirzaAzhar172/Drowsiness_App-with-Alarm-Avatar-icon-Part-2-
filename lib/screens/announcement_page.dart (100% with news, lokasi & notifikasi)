@@ -1,0 +1,394 @@
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart'; // Import url_launcher
+import 'article_model.dart'; // Import model Article
+
+class AnnouncementPage extends StatefulWidget {
+  final List<String> notifications;
+
+  AnnouncementPage({Key? key, required this.notifications}) : super(key: key);
+
+  @override
+  _AnnouncementPageState createState() => _AnnouncementPageState();
+}
+
+class NotificationItem {
+  final String message;
+  final DateTime time;
+
+  NotificationItem({required this.message, required this.time});
+}
+
+class _AnnouncementPageState extends State<AnnouncementPage> {
+  String _location = 'Mencari Lokasi...';
+  String _weather = 'Mencari Cuaca...';
+  List<NotificationItem> _notifications = [];
+  List<Article> _articles = []; // List untuk menyimpan artikel berita dari GNews API
+  final String _gNewsApiKey = '91dd948b6e325f18a5ba78b10ea9eb23'; // API key GNews
+
+  @override
+  void initState() {
+    super.initState();
+    _getLocationFromIP();
+    _notifications = widget.notifications.map((message) => NotificationItem(message: message, time: DateTime.now())).toList();
+    _fetchNews(); // Panggil fungsi untuk fetch berita dari GNews API
+  }
+
+  Future<void> _getLocationFromIP() async {
+    final url = Uri.parse('http://ip-api.com/json');
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _location = '${data['city']}, ${data['region']}, ${data['country']}';
+        });
+        double latitude = data['lat'];
+        double longitude = data['lon'];
+        print('Latitude: $latitude, Longitude: $longitude');
+        await _getWeather(latitude, longitude);
+      } else {
+        setState(() {
+          _location = 'Gagal mendapatkan lokasi.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _location = 'Ralat mendapatkan lokasi: $e';
+      });
+    }
+  }
+
+  Future<void> _getWeather(double latitude, double longitude) async {
+    final apiKey = 'eb3a516fb18b82d0f8e963945e69d17b';
+    final url = Uri.parse(
+        'https://api.openweathermap.org/data/2.5/weather?lat=$latitude&lon=$longitude&appid=$apiKey&units=metric');
+
+    try {
+      print('Membuat permintaan cuaca ke: $url');
+      final response = await http.get(url);
+      print('Respons cuaca: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('Data cuaca: $data');
+        setState(() {
+          _weather =
+          'Cuaca: ${data['weather'][0]['description']}, Suhu: ${data['main']['temp']}°C';
+        });
+      } else {
+        setState(() {
+          _weather = 'Gagal mendapatkan cuaca: ${response.statusCode}';
+        });
+      }
+    } catch (e) {
+      print('Ralat mendapatkan cuaca: $e');
+      setState(() {
+        _weather = 'Ralat mendapatkan cuaca: $e';
+      });
+    }
+  }
+
+  Future<void> _fetchNews() async {
+    try {
+      final url = Uri.parse('https://gnews.io/api/v4/search?q=example&lang=en&country=us&max=10&token=$_gNewsApiKey');
+
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _articles = (data['articles'] as List).map((article) => Article.fromJson(article)).toList();
+        });
+      } else {
+        print('Gagal mendapatkan berita');
+      }
+    } catch (e) {
+      print('Ralat mendapatkan berita: $e');
+    }
+  }
+
+  void _clearNotifications() async {
+    final confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Clear Notifications'),
+        content: Text('Are you sure you want to delete all notifications?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, false);
+            },
+            child: Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, true);
+            },
+            child: Text('Yes'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm ?? false) {
+      setState(() {
+        _notifications.clear();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Announcement', style: TextStyle(color: Colors.white, fontFamily: GoogleFonts.electrolize().fontFamily)),
+        backgroundColor: Color(0xFF1E293B), // Dark app bar color
+      ),
+      backgroundColor: Color(0xFF0F172A), // Dark background color
+      body: ListView(
+        padding: EdgeInsets.all(16.0),
+        children: [
+          // Weather & Location Container
+          Container(
+            decoration: BoxDecoration(
+              color: Color(0xFF1E293B), // Dark container color
+              borderRadius: BorderRadius.circular(10.0),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF64FFDA).withOpacity(0.3),
+                  Color(0xFF1E293B),
+                ],
+              ),
+              border: Border.all(
+                color: Color(0xFF64FFDA), // Neon accent color
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade900.withOpacity(0.3),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.location_on, color: Color(0xFF64FFDA)), // Neon accent color
+                    SizedBox(width: 8),
+                    Text(
+                      'Cuaca & Lokasi:',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontFamily: GoogleFonts.electrolize().fontFamily,
+                      ), // White text color
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+                _location != 'Mencari Lokasi...' ?
+                Text(
+                  '${_location.split(',').first} / ${_weather.split('Suhu: ').last}',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[400], fontFamily: GoogleFonts.electrolize().fontFamily), // Light grey text color
+                ) :
+                Text(
+                  'Shah Alam / 32.86°C',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[400], fontFamily: GoogleFonts.electrolize().fontFamily), // Light grey text color
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16),
+
+          // Notifications Container
+          Container(
+            decoration: BoxDecoration(
+              color: Color(0xFF1E293B), // Dark container color
+              borderRadius: BorderRadius.circular(10.0),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF64FFDA).withOpacity(0.3),
+                  Color(0xFF1E293B),
+                ],
+              ),
+              border: Border.all(
+                color: Color(0xFF64FFDA), // Neon accent color
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade900.withOpacity(0.3),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.notifications, color: Color(0xFF64FFDA)), // Neon accent color
+                        SizedBox(width: 8),
+                        Text(
+                          'Notifikasi',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontFamily: GoogleFonts.electrolize().fontFamily,
+                          ), // White text color
+                        ),
+                      ],
+                    ),
+                    TextButton(
+                      onPressed: _clearNotifications,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor: Colors.white.withOpacity(0.1), // Transparent putih
+                        textStyle: TextStyle(fontSize: 12),
+                      ),
+                      child: Text(
+                        'Clear',
+                        style: TextStyle(fontSize: 12, color: Colors.white, fontFamily: GoogleFonts.electrolize().fontFamily),
+                      ),
+                    ),
+                  ],
+                ),
+                _notifications.isEmpty ?
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text("Tiada notifikasi buat masa ini.", style: TextStyle(color: Colors.grey[400], fontFamily: GoogleFonts.electrolize().fontFamily)), // Light grey text color
+                )
+                    : ListView.builder(
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  itemCount: _notifications.length,
+                  itemBuilder: (context, index) {
+                    final notification = _notifications[index];
+                    return Container(
+                      padding: const EdgeInsets.all(8.0),
+                      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+                      decoration: BoxDecoration(
+                        color: Color(0xFF2D3748), // Dark notification color
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text(notification.message, style: TextStyle(color: Colors.white, fontFamily: GoogleFonts.electrolize().fontFamily))), // White text color
+                          Text(
+                            DateFormat('hh:mm a').format(notification.time),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[400], fontFamily: GoogleFonts.electrolize().fontFamily), // Light grey text color
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 16),
+
+          // News & Media Container
+          Container(
+            decoration: BoxDecoration(
+              color: Color(0xFF1E293B), // Dark container color
+              borderRadius: BorderRadius.circular(10.0),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF64FFDA).withOpacity(0.3),
+                  Color(0xFF1E293B),
+                ],
+              ),
+              border: Border.all(
+                color: Color(0xFF64FFDA), // Neon accent color
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade900.withOpacity(0.3),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.library_books, color: Color(0xFF64FFDA)), // Neon accent color
+                    SizedBox(width: 8),
+                    Text(
+                      'News & Media:',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontFamily: GoogleFonts.electrolize().fontFamily,
+                      ), // White text color
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+                _articles.isEmpty // Tampilkan indicator jika data masih dimuat
+                    ? Center(child: CircularProgressIndicator(color: Color(0xFF64FFDA))) // Warna neon
+                    : ListView.builder(
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  itemCount: _articles.length,
+                  itemBuilder: (context, index) {
+                    final article = _articles[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: InkWell( // Tambah InkWell untuk efek sentuhan
+                        onTap: () async {
+                          final url = article.link;
+                          if (url != null && await canLaunchUrl(Uri.parse(url))) {
+                            await launchUrl(Uri.parse(url));
+                          } else {
+                            print('Could not launch $url');
+                          }
+                        },
+                        child: Text(
+                          article.title,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[400],
+                            fontFamily: GoogleFonts.electrolize().fontFamily,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
