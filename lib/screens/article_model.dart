@@ -1,3 +1,5 @@
+import 'package:url_launcher/url_launcher.dart';
+
 class Article {
   final String title;
   final String link;
@@ -15,5 +17,13 @@ class Article {
       link: json['url'] ?? '',
       description: json['description'] ?? '',
     );
+  }
+
+  Future<void> launchURL() async {
+    if (await canLaunchUrl(Uri.parse(link))) {
+      await launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+    } else {
+      throw 'Could not launch $link';
+    }
   }
 }
