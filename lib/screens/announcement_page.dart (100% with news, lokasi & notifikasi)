@@ -27,7 +27,7 @@ class _AnnouncementPageState extends State<AnnouncementPage> {
   String _weather = 'Mencari Cuaca...';
   List<NotificationItem> _notifications = [];
   List<Article> _articles = []; // List untuk menyimpan artikel berita dari GNews API
-  final String _gNewsApiKey = '91dd948b6e325f18a5ba78b10ea9eb23'; // API key GNews
+  final String _gNewsApiKey = '7ffe2b43a2ce8f23e9472b12012fc3a2'; // API key GNews
 
   @override
   void initState() {
@@ -99,9 +99,13 @@ class _AnnouncementPageState extends State<AnnouncementPage> {
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          _articles = (data['articles'] as List).map((article) => Article.fromJson(article)).toList();
-        });
+        if (data['articles'] != null) {
+          setState(() {
+            _articles = (data['articles'] as List).map((article) => Article.fromJson(article)).toList();
+          });
+        } else {
+          print('Tidak ada artikel yang ditemukan');
+        }
       } else {
         print('Gagal mendapatkan berita');
       }
@@ -366,8 +370,12 @@ class _AnnouncementPageState extends State<AnnouncementPage> {
                       child: InkWell( // Tambah InkWell untuk efek sentuhan
                         onTap: () async {
                           final url = article.link;
-                          if (url != null && await canLaunchUrl(Uri.parse(url))) {
-                            await launchUrl(Uri.parse(url));
+                          if (url != null && url.isNotEmpty && await canLaunchUrl(Uri.parse(url))) {
+                            try {
+                              await launchUrl(Uri.parse(url));
+                            } catch (e) {
+                              print('Error launching $url: $e');
+                            }
                           } else {
                             print('Could not launch $url');
                           }
